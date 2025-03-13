@@ -31,7 +31,9 @@ def build_norm(norm_type: str, dim: int, eps: float = 1e-6):
     elif norm_type == "np_layernorm":
         return nn.LayerNorm(dim, eps=eps, elementwise_affine=False, bias=False)
     elif norm_type == "rmsnorm":
-        return RMSNorm(dim, eps=eps)
+        return RMSNorm(dim, eps=eps, weight=True)
+    elif norm_type == "np_rmsnorm":
+        return RMSNorm(dim, eps=eps, weight=False)
     else:
         raise NotImplementedError(f"Unknown norm_type: '{norm_type}'")
 
@@ -50,17 +52,24 @@ class RMSNorm(nn.Module):
 
     """
 
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, dim: int, eps: float = 1e-6, weight: bool = True):
         super().__init__()
         self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
+        if weight:
+            self.weight = torch.nn.Parameter(torch.ones(dim))
+        else:
+            self.register_parameter('weight', None)
 
     def _norm(self, x: torch.Tensor):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        output = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        if self.weight is not None:
+            return output * self.weight
+        return output
 
     def forward(self, x: torch.Tensor):
         output = self._norm(x.float()).type_as(x)
-        return output * self.weight
+        return output
 
     def reset_parameters(self):
-        torch.nn.init.ones_(self.weight)  # type: ignore
+        if self.weight is not None:
+            torch.nn.init.ones_(self.weight)  # type: ignore
