@@ -19,15 +19,16 @@ from torch.distributed.checkpoint.state_dict import (
     StateDictOptions,
 )
 from torch.distributed.checkpoint.stateful import Stateful
+from torch.distributed import DeviceMesh
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, LRScheduler
 
 from torchtitan.components.ft import FTManager, has_torchft
 from torchtitan.config_manager import JobConfig
 from torchtitan.tools.logging import logger
-from torchtitan.components.muon import Muon, zeropower_backends
 
-from optimizers import DistributedMuon, DistributedMuonV2, Muon
+from optimizers import DistributedMuon, DistributedMuonV2, Muon, Scion
+from torchtitan.optimizers.scion import zeropower_backends
 
 __all__ = [
     "OptimizersContainer",
@@ -125,9 +126,13 @@ class OptimizersContainer(Optimizer, Generic[T]):
         self.optimizers: List[T] = []
         self.model_parts = model_parts
         for model in self.model_parts:
-            kwargs = copy.deepcopy(optimizer_kwargs) # to preserve popped objects across model parts
-            params = _extract_param_groups(model, kwargs)
-            params = list(params)
+            if issubclass(optimizer_cls, (Muon, DistributedMuon, DistributedMuonV2)):
+                kwargs = optimizer_kwargs
+                params = [p for p in model.parameters() if p.requires_grad]
+                kwargs['model'] = model
+            else:
+                kwargs = copy.deepcopy(optimizer_kwargs) # to preserve popped objects across model parts
+                params = list(_extract_param_groups(model, kwargs))
             self.optimizers.append(optimizer_cls(params, **kwargs))
             all_params.extend(params)
         self._validate_length(len(self.model_parts))
@@ -171,7 +176,7 @@ class OptimizersContainer(Optimizer, Generic[T]):
         for i, _ in enumerate(self.model_parts):
             # NB: assumes correspondences between model parts and optimizers
             for group in self.optimizers[i].param_groups: 
-                if optimizer_name == 'Muon':
+                if optimizer_name == 'Scion':
                     param_kwargs = {
                         'momentum': group['momentum'],
                         'nesterov': group['nesterov'],
@@ -330,7 +335,7 @@ def build_optimizers(
     model_parts: List[nn.Module],
     job_config: JobConfig,
     ft_manager: FTManager,
-    extra_kwargs: dict[str, Any],
+    dp_mesh: DeviceMesh = None,
 ) -> OptimizersContainer:
     """Create a OptimizersContainer for the given model parts and job config.
 
@@ -359,7 +364,7 @@ def build_optimizers(
     eps = job_config.optimizer.eps
     weight_decay = job_config.optimizer.weight_decay
 
-    if name in ["Adam", "AdamW"]:
+    if name in ["Adam", "AdamW"] or "Muon" in name:
         optim_implementation = job_config.optimizer.implementation
         assert optim_implementation in ["fused", "foreach", "for-loop"]
 
@@ -374,7 +379,7 @@ def build_optimizers(
             "fused": fused,
             "foreach": foreach,
         }
-    elif name == "Muon":
+    elif name == "Scion":
         backend_steps = job_config.optimizer.backend_steps
         momentum = job_config.optimizer.momentum
         nesterov = job_config.optimizer.nesterov
@@ -410,7 +415,8 @@ def build_optimizers(
     else:
         raise NotImplementedError(f"Optimizer {name} not added.")
 
-    optimizer_kwargs["extra_kwargs"] = extra_kwargs
+    if "Muon" in name:
+        optimizer_kwargs['dp_mesh'] = dp_mesh
 
     optimizer_classes = {
         "Adam": torch.optim.Adam,
@@ -418,6 +424,7 @@ def build_optimizers(
         "Muon": Muon,
         "DistributedMuon": DistributedMuon,
         "DistributedMuonV2": DistributedMuonV2,
+        "Scion": Scion,
     }
     if name not in optimizer_classes:
         raise NotImplementedError(f"Optimizer {name} not added.")
