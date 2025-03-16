@@ -111,9 +111,9 @@ class OptimizersContainer(Optimizer, Generic[T]):
     optimizers: List[T]
     model_parts: List[nn.Module]
     norm_functions = {
-        'spectral_norm': lambda x: torch.linalg.norm(x.data.to(torch.float32), ord=2, dtype=torch.float32),
-        'l1_to_rms': lambda x: l1_to_rms_norm(x),
-        'rms_to_l1': lambda x: rms_to_l1_norm(x),
+        # 'spectral_norm': lambda x: torch.linalg.norm(x.data.to(torch.float32), ord=2, dtype=torch.float32),
+        # 'l1_to_rms': lambda x: l1_to_rms_norm(x),
+        # 'rms_to_l1': lambda x: rms_to_l1_norm(x),
     }
 
     def __init__(
@@ -415,7 +415,7 @@ def build_optimizers(
     else:
         raise NotImplementedError(f"Optimizer {name} not added.")
 
-    if "Muon" in name:
+    if "Muon" in name or name == "Scion": 
         optimizer_kwargs['dp_mesh'] = dp_mesh
 
     optimizer_classes = {
