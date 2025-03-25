@@ -177,6 +177,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # 3. max_seq_len base on inputs
         model_config.norm_type = job_config.model.norm_type
         model_config.vocab_size = tokenizer.n_words
+        model_config.init_std = job_config.model.init_std
         if job_config.model.vocab_size_multiple_of:
             vocab_divisor = job_config.model.vocab_size_multiple_of
             model_config.vocab_size = int(
