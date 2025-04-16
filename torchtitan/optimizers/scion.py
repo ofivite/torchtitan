@@ -29,6 +29,7 @@ class Scion(torch.optim.Optimizer):
                         eps=eps, norm_factor=norm_factor,
                         backend=backend, backend_steps=backend_steps)
         self.is_light = is_light
+        self.use_momentum = (momentum > 0 and momentum < 1) # NB: use default momentum here, param groups can have its own values
         self.is_unconstrained = is_unconstrained
         mesh_dim_names = world_mesh.mesh_dim_names if world_mesh is not None else None
         self.fsdp_enabled = mesh_dim_names is not None and (
@@ -78,7 +79,7 @@ class Scion(torch.optim.Optimizer):
                 if g is None or not p.requires_grad:
                     continue
 
-                if not self.is_light and momentum != 1:
+                if not self.is_light and self.use_momentum:
                     state = self.state[p]
                     if 'momentum_buffer' not in state.keys():
                         state['momentum_buffer'] = torch.zeros_like(g)
@@ -110,8 +111,8 @@ class Scion(torch.optim.Optimizer):
                     p.data.mul_(1-lr)
                 p.data.add_(update, alpha=-lr)
 
-                if momentum != 1 and self.is_light:
-                    g.mul_(1-momentum)
+                if self.is_light and self.use_momentum:
+                    p.grad.mul_(1-momentum)
 
         return loss
 
