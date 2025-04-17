@@ -69,11 +69,18 @@ class Scion(torch.optim.Optimizer):
                 'zeropower_backend': zeropower_backends[group['backend']],
                 'backend_steps': group['backend_steps']
             }
+            # NB: here assume that normalisation with norm_factor
+            #     is done across non-sharded axis, so can skip communication
+            need_to_gather_and_shard = not (
+                group['backend'] == 'identity' and
+                'embed' in group['norm_factor']
+            )
             if self.is_light and nesterov:
                 raise NotImplementedError(
                     "Nesterov momentum is not supported for light mode. "
                     "Please set nesterov=False."
                 )
+            
             for p in group['params']:
                 g = p.grad
                 if g is None or not p.requires_grad:
@@ -87,15 +94,14 @@ class Scion(torch.optim.Optimizer):
                     buf.mul_(1-momentum).add_(g, alpha=momentum)
                     g = buf if not nesterov else buf.mul(1-momentum).add(g, alpha=momentum)
 
-                if self.fsdp_enabled:
+                if self.fsdp_enabled and need_to_gather_and_shard:
                     device_mesh = g.device_mesh
                     placements = g.placements
-                    g = gather_full_grad(g)
-                if isinstance(g, DTensor):
-                    update = self.lmo(g.to_local(), **param_kwargs)
-                else:
-                    update = self.lmo(g, **param_kwargs)
-                if self.fsdp_enabled:
+                    g = gather_full_grad(g).to_local()
+                
+                update = self.lmo(g, **param_kwargs)
+
+                if self.fsdp_enabled and need_to_gather_and_shard:
                     # update = shard_full_grad(update)
                     update = torch.distributed.tensor.distribute_tensor(
                         update,
@@ -120,19 +126,24 @@ class Scion(torch.optim.Optimizer):
     def lmo(self, g, eps, norm_factor, zeropower_backend, backend_steps):
         # NB: make sure this function does not modify the grad inplace
         #     since it is also called during the log of gradients
-        # g = zeropower_backend(g, steps=backend_steps, eps=eps)
-        if g.ndim == 2:
+
+        def _lmo_for_2d_tensor(g):
             g = zeropower_backend(g, steps=backend_steps, eps=eps)
-        else:
+            g = self.normalise_grad(g, norm_factor=norm_factor, eps=eps)
+            return g
+
+        if g.ndim == 2:
+            g = _lmo_for_2d_tensor(g)
+        elif g.ndim == 3:
             g = torch.stack(
-                [
-                    zeropower_backend(g[i], steps=backend_steps, eps=eps)
-                    for i in range(g.shape[0])
-                ],
+                [_lmo_for_2d_tensor(g[i]) for i in range(g.shape[0])],
                 dim=0,
             )
-
-        g = self.normalise_grad(g, norm_factor=norm_factor, eps=eps)
+        else:
+            raise ValueError(
+                f"Unsupported tensor shape: {g.shape}. "
+                "Expected 2D or 3D tensor."
+            )
 
         return g
 

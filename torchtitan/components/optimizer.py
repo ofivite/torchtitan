@@ -241,6 +241,11 @@ class OptimizersContainer(Optimizer, Stateful, Generic[T]):
 
             return optimizer.lmo(g, **kwargs)
         elif isinstance(optimizer, (torch.optim.Adam, torch.optim.AdamW)):
+            if p.ndim == 3:
+                raise NotImplementedError(
+                    "Grad computation for 3D tensors is not supported for Adam-like optimizers."
+                )
+
             eps = kwargs["eps"]
             weight_decay = kwargs["weight_decay"]
             beta1, beta2 = kwargs["betas"]

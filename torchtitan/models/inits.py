@@ -2,7 +2,7 @@ import functools
 from typing import Optional
 
 import torch
-from torch.distributed.tensor import DTensor, Replicate
+from torch.distributed.tensor import DTensor, Replicate, distribute_tensor
 import torch.nn as nn
 
 INIT_FN_TYPES = ["trunc_normal", "normal", "orthogonal", "scion_normal"]
@@ -22,21 +22,24 @@ def orthogonal_(params, gain: float = 1.0, generator: Optional[torch.Generator] 
     if not isinstance(params.data, DTensor):
         return nn.init.orthogonal_(params, gain=gain, generator=generator)
     else:
-        temp_tensor = torch.empty(params.shape)  # full shape
+        temp_tensor = torch.empty(params.shape, device=params.device)  # full shape
         torch.nn.init.orthogonal_(temp_tensor, gain=gain, generator=generator)
 
-        # Create a replicated DTensor
-        replicated = DTensor.from_local(
-            temp_tensor,
-            placements=[Replicate()] * params.device_mesh.ndim,
-            device_mesh=params.device_mesh,
+        params_data = distribute_tensor(
+            temp_tensor, placements=params.placements, device_mesh=params.device_mesh
         )
+        # # Create a replicated DTensor
+        # replicated = DTensor.from_local(
+        #     temp_tensor,
+        #     placements=[Replicate()] * params.device_mesh.ndim,
+        #     device_mesh=params.device_mesh,
+        # )
 
-        # Reshard to match original dtensor's placement
-        resharded = replicated.redistribute(placements=params.placements)
+        # # Reshard to match original dtensor's placement
+        # resharded = replicated.redistribute(placements=params.placements)
 
         # Copy values to original dtensor
-        params.copy_(resharded)
+        params.copy_(params_data)
         return params
 
 
