@@ -82,27 +82,17 @@ class Scion(torch.optim.Optimizer):
                 )
             
             for p in group['params']:
-                g = p.grad
-                if g is None or not p.requires_grad:
+                g = self.get_momentum_or_grad(p, momentum, nesterov, 
+                                              update_buffer=True,
+                                              gather=need_to_gather_and_shard and self.fsdp_enabled)
+                if g is None: 
                     continue
-
-                if not self.is_light and self.use_momentum:
-                    state = self.state[p]
-                    if 'momentum_buffer' not in state.keys():
-                        state['momentum_buffer'] = torch.zeros_like(g)
-                    buf = state['momentum_buffer']
-                    buf.mul_(1-momentum).add_(g, alpha=momentum)
-                    g = buf if not nesterov else buf.mul(1-momentum).add(g, alpha=momentum)
-
-                if self.fsdp_enabled and need_to_gather_and_shard:
-                    device_mesh = g.device_mesh
-                    placements = g.placements
-                    g = gather_full_grad(g).to_local()
-                
                 update = self.lmo(g, **param_kwargs)
 
                 if self.fsdp_enabled and need_to_gather_and_shard:
                     # update = shard_full_grad(update)
+                    device_mesh = g.device_mesh
+                    placements = g.placements
                     update = torch.distributed.tensor.distribute_tensor(
                         update,
                         device_mesh=device_mesh,
@@ -173,6 +163,34 @@ class Scion(torch.optim.Optimizer):
         else:
             raise ValueError(f"Unknown norm_factor: {norm_factor}")
 
+        return g
+
+    @torch.no_grad()
+    def get_momentum_or_grad(self, p, momentum, nesterov, update_buffer=True, gather=True):
+        g = p.grad
+        if g is None or not p.requires_grad:
+            return None
+
+        if not self.is_light and self.use_momentum:
+            state = self.state[p]
+            if "momentum_buffer" not in state.keys():
+                if update_buffer:
+                    state["momentum_buffer"] = torch.zeros_like(g)
+                else:
+                    raise ValueError(
+                        "Momentum buffer not found in optimizer state. "
+                        "Please check if the optimizer is initialized correctly."
+                    )
+            buf = state['momentum_buffer']
+            if update_buffer:
+                buf.mul_(1-momentum).add_(g, alpha=momentum)
+            else:
+                buf = buf.mul(1-momentum).add(g, alpha=momentum)
+            g = buf if not nesterov else buf.mul(1-momentum).add(g, alpha=momentum)
+
+        if gather:
+            g = gather_full_grad(g).to_local()
+        
         return g
 
     def __getstate__(self):
