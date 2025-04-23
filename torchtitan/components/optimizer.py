@@ -229,7 +229,7 @@ class OptimizersContainer(Optimizer, Stateful, Generic[T]):
             nesterov = kwargs.pop("nesterov")
             g = optimizer.get_momentum_or_grad(p, momentum, nesterov, 
                                                update_buffer=False,
-                                               gather=optimizer.fsdp_enabled)
+                                               gather_to_local=optimizer.fsdp_enabled)
             if g is None:
                 return None
             else:

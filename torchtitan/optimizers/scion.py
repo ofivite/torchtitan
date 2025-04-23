@@ -84,15 +84,15 @@ class Scion(torch.optim.Optimizer):
             for p in group['params']:
                 g = self.get_momentum_or_grad(p, momentum, nesterov, 
                                               update_buffer=True,
-                                              gather=need_to_gather_and_shard and self.fsdp_enabled)
+                                              gather_to_local=need_to_gather_and_shard and self.fsdp_enabled)
                 if g is None: 
                     continue
                 update = self.lmo(g, **param_kwargs)
 
                 if self.fsdp_enabled and need_to_gather_and_shard:
                     # update = shard_full_grad(update)
-                    device_mesh = g.device_mesh
-                    placements = g.placements
+                    device_mesh = p.grad.device_mesh
+                    placements = p.grad.placements
                     update = torch.distributed.tensor.distribute_tensor(
                         update,
                         device_mesh=device_mesh,
@@ -166,7 +166,7 @@ class Scion(torch.optim.Optimizer):
         return g
 
     @torch.no_grad()
-    def get_momentum_or_grad(self, p, momentum, nesterov, update_buffer=True, gather=True):
+    def get_momentum_or_grad(self, p, momentum, nesterov, update_buffer=True, gather_to_local=True):
         g = p.grad
         if g is None or not p.requires_grad:
             return None
@@ -188,7 +188,7 @@ class Scion(torch.optim.Optimizer):
                 buf = buf.mul(1-momentum).add(g, alpha=momentum)
             g = buf if not nesterov else buf.mul(1-momentum).add(g, alpha=momentum)
 
-        if gather:
+        if gather_to_local:
             g = gather_full_grad(g).to_local()
         
         return g
