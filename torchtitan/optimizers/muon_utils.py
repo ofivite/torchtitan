@@ -31,21 +31,23 @@ def zeropower_via_newtonschulz5(G, steps=10, eps=1e-7):
     assert (
         len(G.shape) == 2
     ), f"Please make sure gradients are 2D tensors to use NS, got shape: {G.shape}"
-    a, b, c = (3.4445, -4.7750, 2.0315)
-    #     for a, b, c in [ # updated coefficients from @leloykun
-    #     (4.0848, -6.8946, 2.9270),
-    #     (3.9505, -6.3029, 2.6377),
-    #     (3.7418, -5.5913, 2.3037),
-    #     (2.8769, -3.1427, 1.2046),
-    #     (2.8366, -3.0525, 1.2012),
-    # ]:
     original_dtype = G.dtype
     X = G.bfloat16()
     if G.size(0) > G.size(1):
         X = X.T
-    X = X / (torch.linalg.norm(X) + eps)  # ensure top singular value <= 1
+    X = X / (torch.linalg.norm(X) + 1e-7)  # ensure top singular value <= 1
 
-    for _ in range(steps):
+    # a, b, c = (3.4445, -4.7750, 2.0315)
+    # for _ in range(steps):
+    if steps != 5:
+        raise ValueError("Only 5 steps are supported with polar coefficients.")
+    for a, b, c in [ # coefficients from https://arxiv.org/abs/2505.16932
+        (8.20516, -22.90193, 16.46072),
+        (4.06692, -2.86128, 0.51838),
+        (3.91349, -2.82425, 0.52485),
+        (3.30601, -2.43023, 0.48695),
+        (2.30402, -1.64272, 0.40091),
+    ]:
         A = X @ X.T
         B = (
             b * A + c * A @ A
