@@ -357,6 +357,8 @@ class Attention(nn.Module):
         for linear in (self.wq, self.wk, self.wv):
             init_fn(linear.weight, mean=0.0, std=init_std)
         init_fn(self.wo.weight, mean=0.0, std=init_std / residual_div)
+        for norm in (self.q_norm, self.k_norm, self.v_norm, self.o_norm):
+            norm.reset_parameters()
 
     def init_kv_cache(self, max_batch_size: int, max_seq_length: int):
         dtype = self.wk.weight.dtype
@@ -390,6 +392,28 @@ class Attention(nn.Module):
 
         bs, seqlen, _ = x.shape
         xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
+        
+        # seqlen = seqlen + 1
+        # q_zero_tok = torch.zeros(xq.size(0),         # batch
+        #                1,                  # one extra position
+        #                xq.size(2),          # same feature dim
+        #                dtype=xq.dtype,
+        #                device=xq.device)
+        # kv_zero_tok = torch.zeros(xk.size(0),         # batch
+        #                1,                  # one extra position
+        #                xk.size(2),          # same feature dim
+        #                dtype=xk.dtype,
+        #                device=xk.device)
+        # freqs_cis_zero_tok = torch.zeros(
+        #                1,
+        #                freqs_cis.size(1),
+        #                dtype=freqs_cis.dtype,
+        #                device=freqs_cis.device)
+
+        # xq = torch.cat([xq, q_zero_tok], dim=1)
+        # xk = torch.cat([xk, kv_zero_tok], dim=1)
+        # xv = torch.cat([xv, kv_zero_tok], dim=1)
+        # freqs_cis = torch.cat([freqs_cis, freqs_cis_zero_tok], dim=0)
 
         # Use -1 instead of `n_heads` (or `n_kv_heads`) to infer the actual
         # local heads from sizes of xq, xk, and xv as TP may have sharded them
@@ -502,6 +526,7 @@ class FeedForward(nn.Module):
             else init_std
         )
         init_fn(self.w3.weight, mean=0.0, std=gate_init_std)
+        self.out_norm.reset_parameters()
 
 
 class TransformerBlock(nn.Module):

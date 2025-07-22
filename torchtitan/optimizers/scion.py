@@ -162,6 +162,10 @@ class Scion(torch.optim.Optimizer):
                 )
             else:
                 pass
+        # elif g.ndim == 1:
+        #     g = zeropower_backends['identity'](g)
+        #     rms_values = torch.sqrt(g.pow(2).sum(axis=-1, keepdim=True))
+        #     g = g / (rms_values + eps) * g.size(-1) ** 0.5
         else:
             raise ValueError(f"Unknown grad shape: {g.shape}")
 
