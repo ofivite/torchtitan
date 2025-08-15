@@ -1,0 +1,175 @@
+## Need to setup in sbatch for wandb
+# wandb_project 
+# wandb_group
+# wandb_name
+
+# Need to setup
+# job.dump_folder
+# optimizer.lr
+# optimizer.embed_lr
+# optimizer.unembed_lr
+# training.batch_size
+# training.global_batch_size
+# training.steps
+# parallelism.expert_parallel_degree [for MoE]
+
+
+[job]
+config_file = "this_one_does_not_matter"
+dump_folder = "?"
+description = "Llama 3 debug training"
+use_for_integration_test = true
+print_args = true
+
+[profiling]
+enable_profiling = false
+save_traces_folder = "profile_trace"
+profile_freq = 10
+enable_memory_snapshot = false
+save_memory_snapshot_folder = "memory_snapshot"
+
+[metrics]
+log_freq = 16
+log_norm_freq = 16
+enable_tensorboard = true
+disable_color_printing = false
+save_tb_folder = "tb"
+save_for_all_ranks = false
+enable_wandb = true
+
+[model]
+name = "llama3" 
+flavor = "1B-Proxy-nt-x8-depth"
+mup_width_multiplier = 1
+first_in_init_fn_type = "scion_normal_input"
+first_in_init_std = 1
+first_in_exp = 0
+router_init_fn_type = "scaled_orthogonal" # need to check
+intermediate_init_fn_type = "scaled_orthogonal"
+intermediate_init_std = 1
+intermediate_exp = 0
+init_gate_as_residual = false
+final_out_init_fn_type = "scion_normal_output"
+final_out_init_std = 1
+final_out_exp = 0
+norm_type = "np_rmsnorm"
+use_flex_attn = false
+attn_mask_type = "causal"
+tokenizer_path = "/p/data1/trustllmd/wang55/tokenziers/assets/tokenizer/Meta-Llama-3-8B-Instruct/original/tokenizer.model"
+vocab_size_multiple_of = 128
+converters = []
+print_after_conversion = true
+
+[optimizer]
+name = "Scion"
+lr = "?"
+embed_lr = "?"
+unembed_lr = "?"
+eps = 1e-20
+weight_decay = 0.0
+is_light = false
+is_unconstrained = true
+zeropower_backend = "newtonschulz5"
+backend_steps = 5
+momentum = 0.0
+nesterov = false
+embed_str_match = "tok_embeddings.weight"
+unembed_str_match = "output.weight"
+gate_str_match = "\\.gate.expert_embeddings"
+implementation = "fused"
+early_step_in_backward = false
+
+[lr_scheduler]
+warmup_steps = 0
+decay_ratio = 0.0
+decay_type = "linear"
+lr_min = 1.0
+
+[training]
+dataset = [ "simple_custom",]
+dataset_path = [ "/p/data1/trustllmd/ebert1/nemotron-cc-quality-high-actual-actual/train-shuffled_shard-0-of-1_64-nodes",]
+dataset_inner_name = ['default']
+dataset_num_workers = 0
+dataset_pin_memory = true
+dataset_shuffle_buffer_size = 0
+dataset_mix_in_seq = false
+dataset_split = [ "train",]
+dataset_streaming = true
+dataset_key = [ "text",]
+batch_size = "?"
+global_batch_size = "?"
+seq_len = 4096
+num_mtp_tokens = 0
+mtp_loss_weight = 0.3
+max_norm = 0.0
+steps = "?"
+enable_cpu_offload = false
+mixed_precision_param = "bfloat16"
+mixed_precision_reduce = "float32"
+compile = true
+gc_freq = 100
+seed = 1012
+deterministic = false
+
+[parallelism]
+data_parallel_replicate_degree = 1
+enable_compiled_autograd = false
+data_parallel_shard_degree = -1
+fsdp_reshard_after_forward = "default"
+tensor_parallel_degree = 1
+disable_loss_parallel = false
+enable_async_tensor_parallel = false
+pipeline_parallel_degree = 1
+pipeline_parallel_split_points = []
+pipeline_parallel_schedule = "1F1B"
+pipeline_parallel_schedule_csv = ""
+pipeline_parallel_microbatch_size = 1
+context_parallel_degree = 1
+context_parallel_rotate_method = "allgather"
+expert_parallel_degree = 1
+expert_parallel_mode = "naive_dp2ep"
+
+[checkpoint]
+enable_checkpoint = true
+folder = "checkpoint"
+interval = 9999999999
+model_weights_only = false
+export_dtype = "float32"
+create_seed_checkpoint = false
+async_mode = "disabled"
+keep_latest_k = 0
+load_step = -1
+exclude_from_loading = []
+reconfigure_lrs = false
+
+[activation_checkpoint]
+mode = "none"
+selective_ac_option = "2"
+
+[float8]
+enable_fsdp_float8_all_gather = false
+precompute_float8_dynamic_scale_for_fsdp = false
+force_recompute_fp8_weight_in_bwd = false
+filter_fqns = []
+
+[bitnet]
+precompute_bitnet_scale_for_fsdp = false
+
+[comm]
+init_timeout_seconds = 300
+train_timeout_seconds = 100
+trace_buf_size = 20000
+
+[memory_estimation]
+enabled = false
+disable_fake_mode = false
+
+[fault_tolerance]
+enable = false
+replica_id = 0
+group_size = 0
+min_replica_size = 1
+
+[experimental]
+custom_import = ""
+custom_args_module = ""
