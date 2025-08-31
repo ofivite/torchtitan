@@ -187,6 +187,20 @@ llama3_configs = {
         norm_type="np_rmsnorm",
         norm_everywhere=True,
     ),
+    "1B-Proxy-nt-x32-depth": TransformerModelArgs(
+        dim=256,
+        n_layers=128,
+        n_heads=4,
+        n_kv_heads=4,
+        ffn_dim_multiplier=1,  # need to check
+        multiple_of=64,
+        qk_norm=True,
+        norm_eps=1e-20,
+        rope_theta=10000,
+        depth_init=False,
+        norm_type="np_rmsnorm",
+        norm_everywhere=True,
+    ),
     "1B-Proxy-nt-x4-width": TransformerModelArgs(
         dim=1024,
         n_layers=4,
