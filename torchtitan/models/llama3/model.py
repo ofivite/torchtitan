@@ -358,7 +358,8 @@ class Attention(nn.Module):
             init_fn(linear.weight, mean=0.0, std=init_std)
         init_fn(self.wo.weight, mean=0.0, std=init_std / residual_div)
         for norm in (self.q_norm, self.k_norm, self.v_norm, self.o_norm):
-            norm.reset_parameters()
+            if type(norm) != nn.Identity:
+                norm.reset_parameters()
 
     def init_kv_cache(self, max_batch_size: int, max_seq_length: int):
         dtype = self.wk.weight.dtype
@@ -526,7 +527,8 @@ class FeedForward(nn.Module):
             else init_std
         )
         init_fn(self.w3.weight, mean=0.0, std=gate_init_std)
-        self.out_norm.reset_parameters()
+        if type(self.out_norm) != nn.Identity:
+            self.out_norm.reset_parameters()
 
 
 class TransformerBlock(nn.Module):
@@ -612,7 +614,8 @@ class TransformerBlock(nn.Module):
 
     def init_weights(self):
         for norm in (self.attention_norm, self.ffn_norm):
-            norm.reset_parameters()
+            if type(norm) != nn.Identity:
+                norm.reset_parameters()
         self.attention.init_weights(
             self.weight_init_std,
             residual_div=self.residual_div,
@@ -793,7 +796,7 @@ class Transformer(nn.Module, ModelProtocol):
         for layer in self.layers.values():
             if layer is not None:
                 layer.init_weights()
-        if self.norm is not None:
+        if self.norm is not None and type(self.norm) != nn.Identity:
             self.norm.reset_parameters()
         final_out_init_fn = build_init_fn(self.model_args.final_out_init_fn_type)
         final_out_std = (
